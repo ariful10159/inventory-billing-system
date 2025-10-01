@@ -83,6 +83,9 @@ $sales_chart_data = json_encode([12000, 15000, 18000, 14000, 20000, 22000, 17000
             <div class="business-logo">
                 <i class="fas fa-store"></i>
             </div>
+            <div class="shop-photo-wrap">
+                <img src="uploads/shop.jpg" alt="Shop Photo" class="shop-photo">
+            </div>
             <h2>Welcome to <?php echo htmlspecialchars($business_info['shop_name'] ?? 'Your Business'); ?></h2>
             <p style="color: #6c757d;">Manage your business operations efficiently with our comprehensive system.</p>
         </div>
@@ -175,7 +178,7 @@ $sales_chart_data = json_encode([12000, 15000, 18000, 14000, 20000, 22000, 17000
             <div class="action-card">
                 <h3><i class="fas fa-box"></i> Inventory & Sales</h3>
                 <div class="action-buttons">
-                    <a href="#" class="action-btn btn-success">
+                    <a href="add-product.php" class="action-btn btn-success">
                         <i class="fas fa-plus-circle"></i>
                         Add Products
                     </a>
