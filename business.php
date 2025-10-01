@@ -5,30 +5,42 @@ include_once 'config.php';
 // Check if the form is submitted
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Collect form data
-    $shop_name = $_POST['shop_name'];
-    $owner_name = $_POST['owner_name'];
-    $address = $_POST['address'];
-    $contact_info = $_POST['contact_info'];
+    $shop_name = trim($_POST['shop_name']);
+    $owner_name = trim($_POST['owner_name']);
+    $address = trim($_POST['address']);
+    $contact_info = trim($_POST['contact_info']);
 
     // Handle file uploads for shop image and owner photo
     $shop_image = $_FILES['shop_image']['name'];
     $owner_photo = $_FILES['owner_photo']['name'];
 
     $upload_directory = 'uploads/';
+    // Ensure uploads directory exists
+    if (!is_dir($upload_directory)) {
+        mkdir($upload_directory, 0777, true);
+    }
 
-    // Move files to the uploads directory
-    move_uploaded_file($_FILES['shop_image']['tmp_name'], $upload_directory.$shop_image);
-    move_uploaded_file($_FILES['owner_photo']['tmp_name'], $upload_directory.$owner_photo);
+    // Move files to the uploads directory (if uploaded)
+    $shop_image_path = '';
+    $owner_photo_path = '';
+    if (!empty($shop_image) && is_uploaded_file($_FILES['shop_image']['tmp_name'])) {
+        $shop_image_path = $upload_directory . basename($shop_image);
+        move_uploaded_file($_FILES['shop_image']['tmp_name'], $shop_image_path);
+    }
+    if (!empty($owner_photo) && is_uploaded_file($_FILES['owner_photo']['tmp_name'])) {
+        $owner_photo_path = $upload_directory . basename($owner_photo);
+        move_uploaded_file($_FILES['owner_photo']['tmp_name'], $owner_photo_path);
+    }
 
-    // Insert data into the database
-    $query = "INSERT INTO business_info (shop_name, owner_name, address, contact_info, shop_image, owner_photo) 
-              VALUES ('$shop_name', '$owner_name', '$address', '$contact_info', '$shop_image', '$owner_photo')";
-    
-    if (mysqli_query($conn, $query)) {
+    // Insert data into the database using prepared statement
+    $stmt = $conn->prepare("INSERT INTO business_info (shop_name, owner_name, address, contact_info, shop_image, owner_photo) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssss", $shop_name, $owner_name, $address, $contact_info, $shop_image_path, $owner_photo_path);
+    if ($stmt->execute()) {
         echo "Business information added successfully!";
     } else {
-        echo "Error: " . mysqli_error($conn);
+        echo "Error: " . $stmt->error;
     }
+    $stmt->close();
 }
 ?>
 
