@@ -64,11 +64,13 @@ $sales_chart_data = json_encode([12000, 15000, 18000, 14000, 20000, 22000, 17000
             <h1><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
             <div class="user-info">
                 <div class="user-avatar">
-                    <?php echo strtoupper(substr($user['full_name'], 0, 1)); ?>
+                    <?php echo strtoupper(substr($user['owner_name'], 0, 1)); ?>
                 </div>
                 <div>
-                    <div style="font-weight: 600;"><?php echo htmlspecialchars($user['full_name']); ?></div>
-                    <div style="color: #6c757d; font-size: 14px;"><?php echo ucfirst($user['role']); ?></div>
+                    <div style="font-weight: 600;"><?php echo htmlspecialchars($user['owner_name']); ?></div>
+                    <div style="color: #6c757d; font-size: 14px;">
+                        <?php echo isset($user['role']) ? ucfirst($user['role']) : 'Owner'; ?>
+                    </div>
                 </div>
                 <a href="logout.php" class="logout-btn">
                     <i class="fas fa-sign-out-alt"></i> Logout
