@@ -1,12 +1,11 @@
-<?php
-include('config.php');
 
-// পণ্য লিস্ট বের করি (normal & wholesale উভয় প্রাইস অ্যাট্রিবিউট হিসেবে দিব)
-$products = [];
-$res = $conn->query("SELECT id, product_name, normal_price, cost_price FROM products ORDER BY product_name");
-while ($row = $res->fetch_assoc()) {
-  $products[] = $row;
-}
+<?php
+// create-bill.php - Bill creation form with due system
+include('config.php');
+// Fetch customers
+$customers = $conn->query("SELECT * FROM customers ORDER BY name");
+// Fetch products
+$products = $conn->query("SELECT * FROM products ORDER BY product_name");
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -26,268 +25,185 @@ while ($row = $res->fetch_assoc()) {
     button{cursor:pointer; padding:8px 12px; border-radius:6px; border:1px solid #d1d5db; background:#fff}
     button.primary{background:#111827; color:#fff; border-color:#111827}
     button.warn{background:#dc2626; color:#fff; border-color:#dc2626}
+    .due{color:red; font-weight:bold; margin-left:10px;}
     @media (max-width:640px){ .row{grid-template-columns:1fr} }
   </style>
 </head>
 <body>
   <h1>Create Bill</h1>
-
-  <form id="billForm" action="generate_bill.php" method="post" onsubmit="return beforeSubmit()">
-    <!-- Customer Info -->
+  <form id="billForm" action="save-bill.php" method="post" onsubmit="return beforeSubmit()">
     <div class="card">
       <h3>Customer Information</h3>
-      <div class="row">
+      <div class="row" style="position:relative;">
         <label for="customer_name">Customer Name</label>
-        <input type="text" name="customer_name" id="customer_name" required>
+        <input type="text" name="customer_name" id="customer_name" autocomplete="off" oninput="suggestCustomer()" required>
+        <div id="customer_suggestions" style="position:absolute;top:38px;left:180px;z-index:10;background:#fff;border:1px solid #ccc;max-height:120px;overflow-y:auto;display:none;width:calc(100% - 180px);"></div>
       </div>
       <div class="row">
-        <label for="customer_address">Customer Address</label>
-        <textarea name="customer_address" id="customer_address" required></textarea>
+        <label for="customer_contact">Contact</label>
+        <input type="text" name="customer_contact" id="customer_contact" autocomplete="off" oninput="suggestCustomerContact()">
       </div>
       <div class="row">
-        <label for="customer_contact">Customer Contact Info</label>
-        <input type="text" name="customer_contact" id="customer_contact" required>
+        <label for="customer_address">Address</label>
+        <input type="text" name="customer_address" id="customer_address">
       </div>
-      <div class="row">
-        <label for="customer_type">Customer Type</label>
-        <select name="customer_type" id="customer_type">
-          <option value="normal">Normal</option>
-          <option value="wholesale">Wholesale</option>
-        </select>
-      </div>
+      <span id="dueInfo" class="due"></span>
     </div>
-
-    <!-- Add Product Form -->
     <div class="card">
-      <h3>Add Product</h3>
-      <div class="row">
-        <label for="product_select">Product</label>
-        <select id="product_select">
-          <?php foreach($products as $p): ?>
-            <option
-              value="<?= htmlspecialchars($p['id']) ?>"
-              data-name="<?= htmlspecialchars($p['product_name']) ?>"
-              data-price-normal="<?= htmlspecialchars($p['normal_price']) ?>"
-              data-price-wholesale="<?= htmlspecialchars($p['cost_price']) ?>"
-            >
-              <?= htmlspecialchars($p['product_name']) ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-
-      <div class="row">
-        <label for="quantity_input">Quantity</label>
-        <input type="number" id="quantity_input" min="1" placeholder="e.g. 1">
-      </div>
-
-      <div class="row">
-        <label for="price_input">Price (per unit)</label>
-        <input type="number" id="price_input" step="0.01" placeholder="Auto / Manual">
-      </div>
-
-      <div class="row">
-        <label for="subtotal_input">Subtotal</label>
-        <input type="number" id="subtotal_input" step="0.01" placeholder="Auto" readonly>
-      </div>
-
-      <div class="actions">
-        <button type="button" class="primary" id="addBtn">Add Product</button>
-        <button type="button" class="primary" id="saveEditBtn" style="display:none;">Save Changes</button>
-        <button type="button" id="resetBtn">Reset</button>
-      </div>
-    </div>
-
-    <!-- Product List -->
-    <div class="card">
-      <h3>Product List</h3>
-      <table id="itemsTable">
+      <h3>Add Products</h3>
+      <table id="product-table">
         <thead>
           <tr>
-            <th>#</th>
             <th>Product</th>
             <th>Qty</th>
             <th>Price</th>
             <th>Subtotal</th>
-            <th>Actions</th>
+            <th>Action</th>
           </tr>
         </thead>
-        <tbody><!-- rows render here --></tbody>
+        <tbody></tbody>
         <tfoot>
           <tr>
-            <td colspan="4" style="text-align:right;">Total</td>
+            <td colspan="3" style="text-align:right;">Total</td>
             <td id="totalCell">0.00</td>
             <td></td>
           </tr>
         </tfoot>
       </table>
+      <button type="button" onclick="addProductRow()">Add Product</button>
     </div>
-
-    <!-- Hidden field: items as JSON -->
-    <input type="hidden" name="items_json" id="items_json">
-    <input type="hidden" name="total" id="total_hidden">
-
+    <div class="card">
+      <div class="row">
+        <label for="paid_amount">Paid Amount</label>
+        <input type="number" name="paid_amount" id="paid_amount" value="0" min="0" step="0.01" oninput="updateDue()">
+      </div>
+      <div class="row">
+        <label for="due_amount">Due Amount</label>
+        <input type="number" name="due_amount" id="due_amount" value="0" readonly>
+      </div>
+    </div>
     <div class="actions">
-      <button type="submit" class="primary">Generate Bill</button>
+      <button type="submit" class="primary">Save Bill</button>
     </div>
   </form>
-
   <script>
-    // ==== Data & State ====
-    const productSelect = document.getElementById('product_select');
-    const qtyInput = document.getElementById('quantity_input');
-    const priceInput = document.getElementById('price_input');
-    const subtotalInput = document.getElementById('subtotal_input');
-    const customerType = document.getElementById('customer_type');
+  let productCount = 0;
+  const products = <?php
+    $pArr = [];
+    $products2 = $conn->query("SELECT * FROM products");
+    while($row = $products2->fetch_assoc()) $pArr[] = $row;
+    echo json_encode($pArr);
+  ?>;
 
-    const addBtn = document.getElementById('addBtn');
-    const saveEditBtn = document.getElementById('saveEditBtn');
-    const resetBtn = document.getElementById('resetBtn');
-
-    const itemsTableBody = document.querySelector('#itemsTable tbody');
-    const totalCell = document.getElementById('totalCell');
-
-    const itemsJson = document.getElementById('items_json');
-    const totalHidden = document.getElementById('total_hidden');
-
-    let items = [];        // {product_id, product_name, quantity, price, subtotal}
-    let editIndex = null;  // null => add mode; number => edit mode
-
-    // ==== Helpers ====
-    function toNum(v) { return isNaN(parseFloat(v)) ? 0 : parseFloat(v); }
-
-    function setAutoPriceFromSelection() {
-      const opt = productSelect.options[productSelect.selectedIndex];
-      const type = customerType.value; // 'normal' or 'wholesale'
-      let price = type === 'wholesale'
-        ? toNum(opt.getAttribute('data-price-wholesale'))
-        : toNum(opt.getAttribute('data-price-normal'));
-      // Always set the price based on selection
-      priceInput.value = price.toFixed(2);
-      calcSubtotal();
-    }
-
-    function calcSubtotal() {
-      const qty = toNum(qtyInput.value);
-      const price = toNum(priceInput.value);
-      subtotalInput.value = (qty * price).toFixed(2);
-    }
-
-    function clearProductForm() {
-      qtyInput.value = '';
-      priceInput.value = '';
-      subtotalInput.value = '';
-      productSelect.selectedIndex = 0;
-      editIndex = null;
-      saveEditBtn.style.display = 'none';
-      addBtn.style.display = 'inline-block';
-      setAutoPriceFromSelection();
-    }
-
-    function renderTable() {
-      itemsTableBody.innerHTML = '';
-      let total = 0;
-      items.forEach((it, idx) => {
-        total += toNum(it.subtotal);
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${idx + 1}</td>
-          <td>${escapeHtml(it.product_name)}</td>
-          <td>${it.quantity}</td>
-          <td>${Number(it.price).toFixed(2)}</td>
-          <td>${Number(it.subtotal).toFixed(2)}</td>
-          <td>
-            <button type="button" onclick="onEdit(${idx})">Edit</button>
-          </td>
-        `;
-        itemsTableBody.appendChild(tr);
+  // --- Customer Autocomplete ---
+  function suggestCustomer() {
+    const name = document.getElementById('customer_name').value;
+    if (name.length < 1) { document.getElementById('customer_suggestions').style.display = 'none'; return; }
+    fetch('suggest_customer.php?name=' + encodeURIComponent(name))
+      .then(res => res.json())
+      .then(data => {
+        const box = document.getElementById('customer_suggestions');
+        if (data.length === 0) { box.style.display = 'none'; return; }
+        box.innerHTML = data.map(c => `<div style='padding:6px;cursor:pointer' onclick='selectCustomer(${JSON.stringify(c)})'>${c.name} (${c.contact||''})</div>`).join('');
+        box.style.display = 'block';
       });
-      totalCell.textContent = total.toFixed(2);
+  }
+  function selectCustomer(c) {
+    document.getElementById('customer_name').value = c.name;
+    document.getElementById('customer_contact').value = c.contact||'';
+    document.getElementById('customer_address').value = c.address||'';
+    document.getElementById('customer_suggestions').style.display = 'none';
+    fetchDueByName(c.name);
+  }
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('#customer_suggestions') && e.target.id !== 'customer_name') {
+      document.getElementById('customer_suggestions').style.display = 'none';
     }
+  });
 
-    // Simple escape function to handle HTML encoding
-    function escapeHtml(s){return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]))}
-
-    // ==== Actions ====
-    addBtn.addEventListener('click', () => {
-      const opt = productSelect.options[productSelect.selectedIndex];
-      const product_id = opt.value;
-      const product_name = opt.getAttribute('data-name');
-      const quantity = toNum(qtyInput.value);
-      const price = toNum(priceInput.value);
-      const subtotal = toNum(subtotalInput.value);
-
-      if (!product_id || quantity <= 0 || price <= 0) {
-        alert('Product, Quantity and Price must be provided.');
-        return;
-      }
-
-      items.push({ product_id, product_name, quantity, price, subtotal });
-      renderTable();
-      clearProductForm();
-    });
-
-    saveEditBtn.addEventListener('click', () => {
-      if (editIndex === null) return;
-      const opt = productSelect.options[productSelect.selectedIndex];
-      const product_id = opt.value;
-      const product_name = opt.getAttribute('data-name');
-      const quantity = toNum(qtyInput.value);
-      const price = toNum(priceInput.value);
-      const subtotal = toNum(subtotalInput.value);
-
-      if (!product_id || quantity <= 0 || price <= 0) {
-        alert('Product, Quantity and Price must be provided.');
-        return;
-      }
-
-      items[editIndex] = { product_id, product_name, quantity, price, subtotal };
-      renderTable();
-      clearProductForm();
-    });
-
-    resetBtn.addEventListener('click', clearProductForm);
-
-    // Edit a product row
-    window.onEdit = function(index){
-      const it = items[index];
-      editIndex = index;
-      // Load the form with current product's data
-      for (let i = 0; i < productSelect.options.length; i++) {
-        if (productSelect.options[i].value == it.product_id) {
-          productSelect.selectedIndex = i;
-          break;
+  function suggestCustomerContact() {
+    const contact = document.getElementById('customer_contact').value;
+    if (contact.length < 1) return;
+    fetch('suggest_customer.php?contact=' + encodeURIComponent(contact))
+      .then(res => res.json())
+      .then(data => {
+        if (data.length > 0) {
+          const c = data[0];
+          document.getElementById('customer_name').value = c.name;
+          document.getElementById('customer_address').value = c.address||'';
         }
-      }
-      qtyInput.value = it.quantity;
-      priceInput.value = Number(it.price).toFixed(2);
-      subtotalInput.value = Number(it.subtotal).toFixed(2);
+      });
+  }
 
-      addBtn.style.display = 'none';
-      saveEditBtn.style.display = 'inline-block';
+  function fetchDueByName(name) {
+    fetch('get_due.php?customer_name=' + encodeURIComponent(name))
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById('dueInfo').textContent = data.due > 0 ? `Previous Due: ${data.due}` : '';
+      });
+  }
+    const tbody = document.getElementById('product-table').querySelector('tbody');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>
+        <select name="products[${productCount}][product_id]" id="product_${productCount}" onchange="updatePrice(${productCount})">
+          ${products.map(p => `<option value="${p.id}" data-price="${p.normal_price}">${p.product_name}</option>`).join('')}
+        </select>
+      </td>
+      <td><input type="number" name="products[${productCount}][quantity]" id="quantity_${productCount}" min="1" value="1" oninput="calculateSubtotal(${productCount})"></td>
+      <td><input type="number" name="products[${productCount}][price]" id="price_${productCount}" step="0.01" required oninput="calculateSubtotal(${productCount})"></td>
+      <td><input type="number" name="products[${productCount}][subtotal]" id="subtotal_${productCount}" step="0.01" required readonly></td>
+      <td><button type="button" onclick="removeProductRow(this)">Remove</button></td>
+    `;
+    tbody.appendChild(row);
+    setAutoPriceFromSelection(productCount);
+    productCount++;
+    updateTotal();
+  }
+  function updatePrice(index) {
+    setAutoPriceFromSelection(index);
+    calculateSubtotal(index);
+  }
+  function setAutoPriceFromSelection(index) {
+    const productSelect = document.getElementById('product_' + index);
+    const selectedOption = productSelect.options[productSelect.selectedIndex];
+    let productPrice = selectedOption.getAttribute('data-price');
+    document.getElementById('price_' + index).value = productPrice;
+    calculateSubtotal(index);
+  }
+  function calculateSubtotal(index) {
+    const price = parseFloat(document.getElementById('price_' + index).value) || 0;
+    const quantity = parseFloat(document.getElementById('quantity_' + index).value) || 0;
+    const subtotal = price * quantity;
+    document.getElementById('subtotal_' + index).value = subtotal.toFixed(2);
+    updateTotal();
+  }
+  function updateTotal() {
+    let total = 0;
+    for (let i = 0; i < productCount; i++) {
+      const subtotalField = document.getElementById('subtotal_' + i);
+      if (subtotalField) total += parseFloat(subtotalField.value) || 0;
     }
-
-    // Dynamic calculation
-    customerType.addEventListener('change', setAutoPriceFromSelection);
-    productSelect.addEventListener('change', setAutoPriceFromSelection);
-    qtyInput.addEventListener('input', calcSubtotal);
-    priceInput.addEventListener('input', calcSubtotal);
-
-    // Initialize price for the first product form field
-    setAutoPriceFromSelection();
-
-    // Before submit, prepare items as JSON
-    function beforeSubmit(){
-      if(items.length === 0){
-        alert('Please add at least one product.');
-        return false;
-      }
-      const total = items.reduce((acc, it) => acc + toNum(it.subtotal), 0);
-      document.getElementById('total_hidden').value = total.toFixed(2);
-      document.getElementById('items_json').value = JSON.stringify(items);
-      return true;
-    }
-    window.beforeSubmit = beforeSubmit;
+    document.getElementById('totalCell').textContent = total.toFixed(2);
+    document.getElementById('due_amount').value = (total - (parseFloat(document.getElementById('paid_amount').value) || 0)).toFixed(2);
+  }
+  function removeProductRow(btn) {
+    btn.closest('tr').remove();
+    updateTotal();
+  }
+  function updateDue() {
+    const total = parseFloat(document.getElementById('totalCell').textContent) || 0;
+    const paid = parseFloat(document.getElementById('paid_amount').value) || 0;
+    document.getElementById('due_amount').value = (total - paid).toFixed(2);
+  }
+  // (No longer needed: fetchDue for dropdown)
+  window.onload = function() { addProductRow(); }
+  function beforeSubmit() {
+    // Basic validation
+    if (!document.getElementById('customer_id').value) { alert('Select customer'); return false; }
+    if (document.querySelectorAll('#product-table tbody tr').length === 0) { alert('Add at least one product'); return false; }
+    return true;
+  }
   </script>
 </body>
 </html>
